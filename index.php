@@ -25,27 +25,53 @@
         </form>
         <div>
         <?php 
-            try {
-                if (isset($_POST["rss-url"])) {
-                    $url = $_POST["rss-url"];
-                    $rss = simplexml_load_file($url);
-                } else {
-                    echo '<h4 class="text-center m-4">Enter an URL to see posts</h4>';
-                }
-        
-                if(isset($url)){
-                    echo '<h4 class="text-center m-4 fs-1">'. $rss->channel->title . '</h4>';
-
-                    foreach ($rss->channel->item as $item) {
-                        echo '<div class="post border rounded p-4 my-3">';
-                            echo '<h4 class="my-5 text-center"><a href="'. $item->link .'">' . $item->title . "</a></h4>";
-                            echo "<p>" . $item->description . "</p>";
-                            echo "<p>" . $item->pubDate . "</p><br><hr>";
-                        echo '</div>';
-                    } 
-                }
-            } catch (Exception $e) {
+            session_start();
+            if (!isset($_SESSION['feeds'])) {
+                $_SESSION['feeds'] = array(); // Initialize session feeds array if not set
+            }
+            if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST["rss-url"])) {
+                $url = $_POST["rss-url"];
+                array_push($_SESSION['feeds'], $url); // Add the new URL to the session feeds array
             
+                // Redirect to the same page to avoid form resubmission
+                header("Location: " . $_SERVER['PHP_SELF']);
+                exit();
+            } 
+            if (empty($_SESSION['feeds'])) {
+                echo '<h4 class="text-center m-4">Enter an URL to see posts</h4>';
+            } else {
+                $allItems = array(); // Array to store all RSS items
+
+                // Loop through all feeds in the session
+                foreach ($_SESSION['feeds'] as $feed) {
+                    $rss = simplexml_load_file($feed);
+                    
+                    // Loop through each item in the feed
+                    foreach ($rss->channel->item as $item) {
+                        $allItems[] = array(
+                            'title' => (string)$item->title,
+                            'link' => (string)$item->link,
+                            'description' => (string)$item->description,
+                            'pubDate' => new DateTime((string)$item->pubDate), // Convert pubDate to DateTime object
+                            'channelTitle' => (string)$rss->channel->title
+                        );
+                    }
+                }
+
+                // Sort the array by pubDate in descending order
+                usort($allItems, function($a, $b) {
+                    return $b['pubDate'] <=> $a['pubDate']; // Compare dates, newest first
+                });
+
+                // Display sorted feed items
+                foreach ($allItems as $item) {
+                    echo '<div class="post border rounded p-4 my-3">';
+                        echo '<h4 class="text-center my-5 fs-2">'. $item['channelTitle'] . '</h4>';
+                        echo '<h4 class="my-5 text-center fs-3"><a href="'. $item['link'] .'">' . $item['title'] . "</a></h4>";
+                        echo "<p>" . $item['description'] . "</p>";
+                        echo "<p>" . $item['pubDate']->format('D, d M Y H:i:s') . "</p><br><hr>"; // Format date
+                    echo '</div>';
+                }
             }
         ?>
         </div>
